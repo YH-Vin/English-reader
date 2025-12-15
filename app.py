@@ -2,187 +2,310 @@ import streamlit as st
 from openai import OpenAI
 import json
 import datetime
+import base64
+import zlib
 
 # -----------------------------------------------------------------------------
-# 1. 页面与状态配置
+# 1. 极简主义视觉配置 (CSS Injection)
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="DeepRead - 深度英语降维", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="DeepRead Pro", page_icon="📘", layout="wide")
 
-# 初始化 Session State (用于像"内存"一样暂时记住数据)
+# 自定义 CSS：去除杂乱边框，使用苹果风/Notion风的极简设计
+custom_css = """
+<style>
+    /* 隐藏 Streamlit 默认的汉堡菜单和页脚 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* 全局字体优化 */
+    .stApp {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+
+    /* 标题样式 */
+    h1 {
+        font-weight: 700 !important;
+        letter-spacing: -0.05em !important;
+        color: #111 !important;
+    }
+
+    /* 输入框美化：去除默认黑色边框，改为柔和阴影 */
+    .stTextArea textarea {
+        background-color: #f7f9fb !important;
+        border: 1px solid #e1e4e8 !important;
+        border-radius: 12px !important;
+        padding: 15px !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease;
+    }
+    .stTextArea textarea:focus {
+        border-color: #4dabf7 !important;
+        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.1) !important;
+        background-color: #ffffff !important;
+    }
+
+    /* 按钮美化：扁平化设计 */
+    div.stButton > button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        transition: transform 0.1s;
+    }
+    div.stButton > button:active {
+        transform: scale(0.98);
+    }
+    
+    /* 结果展示区的排版优化 */
+    hr {
+        margin: 2em 0 !important;
+        border: none !important;
+        border-top: 1px solid #eaeaea !important;
+    }
+</style>
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# 2. 会话状态与核心逻辑
+# -----------------------------------------------------------------------------
 if "history" not in st.session_state:
-    st.session_state.history = []  # 存放所有的阅读记录
-
+    st.session_state.history = []
 if "user_level" not in st.session_state:
-    st.session_state.user_level = "Intermediate" # 默认等级
+    st.session_state.user_level = "Intermediate"
 
-# -----------------------------------------------------------------------------
-# 2. 核心功能函数
-# -----------------------------------------------------------------------------
 def get_api_key():
-    # 优先从 Secrets 获取，否则侧边栏输入
     if "ALIYUN_API_KEY" in st.secrets:
         return st.secrets["ALIYUN_API_KEY"]
     return None
 
-def analyze_text(client, text, level, model):
-    """
-    调用 AI 进行全方位分析：降维 + 语法 + 词汇 + 文化
-    要求 AI 返回 JSON 格式以便程序处理
-    """
+# --- 存档/读档核心功能 ---
+def generate_save_token(data):
+    """压缩并编码历史记录"""
+    if not data: return ""
+    try:
+        json_str = json.dumps(data)
+        compressed = zlib.compress(json_str.encode('utf-8'))
+        return base64.b64encode(compressed).decode('utf-8')
+    except: return ""
+
+def load_save_token(token):
+    """解码并恢复历史记录"""
+    try:
+        decoded = base64.b64decode(token)
+        json_str = zlib.decompress(decoded).decode('utf-8')
+        return json.loads(json_str)
+    except: return None
+
+# --- AI 分析核心功能 ---
+def analyze_text_pro(client, text, level, model):
     prompt = f"""
-    You are an expert English teacher. Analyze the user's text based on their level: {level}.
+    You are an elite English Linguistics Professor. Analyze the provided text for a student at level: {level}.
     
-    Output format: STRICT JSON with the following keys:
-    1. "rewritten": The simplified version of the text (keep meaning, lower complexity).
-    2. "vocabulary": A list of objects, each containing "word" (from original text), "definition" (English simple definition), and "context" (why it is used here). Max 5 hardest words.
-    3. "grammar": A list of strings explaining complex sentence structures found in the original text.
-    4. "culture": A string explaining any idioms, cultural references, or tone (if none, return "No special cultural context").
+    GOAL: Produce a structured learning guide like a high-quality textbook.
     
+    OUTPUT FORMAT: Return STRICT JSON with these keys:
+    1. "main_idea": Concise summary (2-3 sentences).
+    2. "explanation": List of objects (keys: "title", "original", "meaning"). Focus on deep comprehension.
+    3. "grammar": List of objects (keys: "title", "original", "breakdown"). Explain syntax/structure.
+    4. "vocabulary": List of objects (keys: "word", "ipa", "definition", "context"). Max 6 hard words. Include IPA pronunciation.
+
     Original Text:
     {text}
     """
-    
     try:
         response = client.chat.completions.create(
             model=model,
-            messages=[{"role": "system", "content": "You are a JSON-speaking English tutor."},
-                      {"role": "user", "content": prompt}],
-            temperature=0.3, # 低温度保证 JSON 格式稳定
-            response_format={"type": "json_object"} # 强制 JSON 模式 (如果模型支持)
+            messages=[
+                {"role": "system", "content": "You are a JSON-speaking Linguistics Professor."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"}
         )
         return json.loads(response.choices[0].message.content)
     except Exception as e:
         return {"error": str(e)}
 
 # -----------------------------------------------------------------------------
-# 3. 侧边栏：用户画像 (记忆功能)
+# 3. 侧边栏布局 (设置 & 备份)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.header("👤 学习者档案")
+    st.header("⚙️ Settings")
     
-    # 获取 API Key (如果没有配置 Secrets，显示输入框)
+    # API Key
     api_key = get_api_key()
     if not api_key:
-        api_key = st.text_input("🔑 输入阿里云 API Key", type="password")
+        api_key = st.text_input("API Key", type="password", placeholder="Paste Aliyun Key here")
         if not api_key:
-            st.warning("请输入 Key 以开始使用")
-
+            st.caption("⚠️ Key required to start.")
+    
     st.divider()
     
-    # 设定用户水平 (记忆功能的一部分)
-    st.subheader("你的当前水平")
-    levels = ["Beginner (小学/初中)", "Intermediate (高中/四级)", "Advanced (六级/考研)", "Native (雅思/托福)"]
-    selected_level = st.selectbox("选择水平", levels, index=1)
-    st.session_state.user_level = selected_level
+    # Level Selection
+    st.subheader("👤 User Level")
+    st.session_state.user_level = st.selectbox(
+        "Select your target level:",
+        ["Beginner (A1-A2)", "Intermediate (B1-B2)", "Advanced (C1-C2)"],
+        index=1
+    )
     
-    st.info(f"🧠 AI 将根据 **{selected_level.split()[0]}** 水平为你定制内容。")
+    st.divider()
+    
+    # === 💾 存档黑科技 ===
+    with st.expander("💾 Backup / Restore", expanded=False):
+        st.caption("Use this token to save/load your progress across sessions.")
+        
+        # 导出
+        st.markdown("**Export Token**")
+        if st.session_state.history:
+            token = generate_save_token(st.session_state.history)
+            st.code(token, language="text")
+            st.caption("👆 Copy this code to your notes.")
+        else:
+            st.info("No history to save yet.")
+            
+        st.markdown("---")
+        
+        # 导入
+        st.markdown("**Import Token**")
+        restore_token = st.text_input("Paste token here:", label_visibility="collapsed")
+        if st.button("🔄 Restore Data", use_container_width=True):
+            data = load_save_token(restore_token)
+            if data:
+                st.session_state.history = data
+                st.toast("✅ Data restored successfully!", icon="🎉")
+                st.rerun()
+            else:
+                st.error("Invalid token.")
 
 # -----------------------------------------------------------------------------
-# 4. 主界面：双 Tab 布局
+# 4. 主界面 (Tabs)
 # -----------------------------------------------------------------------------
-st.title("🧠 DeepRead 英语降维学习器")
+st.title("📘 DeepRead Pro")
+st.caption("Your AI-Powered Linguistics Tutor")
 
-tab1, tab2 = st.tabs(["📖 深度阅读 & 分析", "🖨️ 资料库 & 导出"])
+tab_analysis, tab_library = st.tabs(["✨ Deep Analysis", "📚 My Library"])
 
-# === Tab 1: 阅读与分析功能 ===
-with tab1:
-    col_input, col_output = st.columns([1, 1.2])
+# === Tab 1: 深度分析 ===
+with tab_analysis:
+    col_in, col_out = st.columns([1, 1.1])
     
-    with col_input:
-        st.subheader("原文输入")
-        source_text = st.text_area("粘贴英语长难句...", height=300)
-        analyze_btn = st.button("🚀 降维 & 深度分析", type="primary", use_container_width=True)
-    
-    with col_output:
-        st.subheader("学习面板")
-        result_container = st.container()
+    with col_in:
+        st.markdown("#### Input Text")
+        source_text = st.text_area(
+            "Enter text to analyze...", 
+            height=350, 
+            placeholder="Paste English text here (e.g. from The Economist, NYT)..."
+        )
+        
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            model = st.selectbox("Model", ["qwen-plus", "qwen-max"], label_visibility="collapsed")
+        with c2:
+            analyze_btn = st.button("Analyze 🚀", type="primary", use_container_width=True)
 
-    if analyze_btn and api_key and source_text:
-        with result_container:
-            with st.spinner("AI 正在拆解语法、查词、重写中..."):
-                client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
-                
-                # 调用核心分析函数
-                data = analyze_text(client, source_text, st.session_state.user_level, "qwen-plus")
-                
-                if "error" in data:
-                    st.error(f"分析失败: {data['error']}")
-                else:
-                    # 1. 展示降维文本
-                    st.success("✅ 降维改写")
-                    st.markdown(f"**{data['rewritten']}**")
+    with col_out:
+        st.markdown("#### Insight")
+        result_box = st.container()
+
+    # 触发逻辑
+    if analyze_btn:
+        if not api_key:
+            st.toast("🚫 Please enter API Key first.")
+        elif not source_text:
+            st.toast("✍️ Please enter some text.")
+        else:
+            with result_box:
+                with st.spinner("Analyzing structure, grammar, and context..."):
+                    client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+                    data = analyze_text_pro(client, source_text, st.session_state.user_level, model)
                     
-                    # 2. 展示分析 (使用折叠面板保持整洁)
-                    with st.expander("🔍 重点词汇 (Vocabulary)", expanded=True):
-                        for v in data.get('vocabulary', []):
-                            st.markdown(f"- **{v['word']}**: {v['definition']}")
-                    
-                    with st.expander("📐 语法拆解 (Grammar)"):
-                        for g in data.get('grammar', []):
-                            st.markdown(f"- {g}")
+                    if "error" in data:
+                        st.error(f"Error: {data['error']}")
+                    else:
+                        # -----------------------------------------------
+                        # 构建完美的 Markdown 输出 (The Textbook Style)
+                        # -----------------------------------------------
+                        md_content = f"### **Main Idea**\n{data['main_idea']}\n\n"
+                        
+                        md_content += "---\n### **Detailed Explanation**\n\n"
+                        for i, item in enumerate(data['explanation'], 1):
+                            md_content += f"**{i}. {item['title']}**\n"
+                            md_content += f"> *Original: \"{item['original']}\"*\n\n"
+                            md_content += f"*   **Meaning:** {item['meaning']}\n\n"
+                        
+                        md_content += "---\n### **Grammar Breakdown**\n\n"
+                        for i, item in enumerate(data['grammar'], 1):
+                            md_content += f"**{i}. {item['title']}**\n"
+                            md_content += f"> *\"{item['original']}\"*\n\n"
+                            md_content += f"*   **Analysis:** {item['breakdown']}\n\n"
                             
-                    with st.expander("🌍 文化与背景 (Context)"):
-                        st.write(data.get('culture', '无特殊背景'))
+                        md_content += "---\n### **Vocabulary**\n\n"
+                        for i, item in enumerate(data['vocabulary'], 1):
+                            md_content += f"**{i}. {item['word']}** `{item.get('ipa', '')}`\n"
+                            md_content += f"*   **Def:** {item['definition']}\n"
+                            md_content += f"*   **Ctx:** {item['context']}\n\n"
 
-                    # 3. 存入历史记录 (记忆功能)
-                    record = {
-                        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                        "original": source_text,
-                        "rewritten": data['rewritten'],
-                        "vocab": data.get('vocabulary', []),
-                        "grammar": data.get('grammar', [])
-                    }
-                    st.session_state.history.insert(0, record) # 插到最前面
+                        # 展示结果
+                        st.markdown(md_content)
+                        
+                        # 自动存入历史
+                        record = {
+                            "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            "original": source_text,
+                            "markdown": md_content
+                        }
+                        st.session_state.history.insert(0, record)
+                        st.toast("✅ Analysis saved to Library!", icon="💾")
 
-# === Tab 2: 汇总与导出功能 ===
-with tab2:
-    st.header("🗂️ 你的学习资料库")
+# === Tab 2: 历史资料库 ===
+with tab_library:
+    st.markdown("#### 🗂️ Knowledge Base")
     
     if not st.session_state.history:
-        st.info("还没有记录，快去 Tab 1 进行阅读吧！")
+        st.info("No records found. Go to 'Deep Analysis' to start.")
     else:
-        # 多选框：选择要打印的内容
-        st.write("勾选你想要汇总打印的笔记：")
-        
-        # 创建一个列表来保存被选中的索引
-        selected_indices = []
-        
-        for i, item in enumerate(st.session_state.history):
-            with st.container(border=True):
-                # checkbox 的 key 必须唯一
-                is_selected = st.checkbox(f"{item['time']} - {item['original'][:30]}...", key=f"hist_{i}")
-                if is_selected:
-                    selected_indices.append(i)
-                
-                st.caption(f"降维: {item['rewritten'][:50]}...")
+        # 工具栏
+        col_tools, _ = st.columns([1, 3])
+        with col_tools:
+            if st.button("🗑️ Clear All History"):
+                st.session_state.history = []
+                st.rerun()
 
         st.divider()
         
-        # 导出逻辑
-        if selected_indices:
-            st.subheader("📤 导出选项")
+        # 导出选择逻辑
+        selected_records = []
+        for i, note in enumerate(st.session_state.history):
+            with st.container():
+                # 使用两列布局：复选框 + 折叠面板
+                c_check, c_content = st.columns([0.05, 0.95])
+                with c_check:
+                    # 垂直居中稍微有点难，直接放这里
+                    if st.checkbox("", key=f"check_{i}"):
+                        selected_records.append(note)
+                with c_content:
+                    with st.expander(f"📅 {note['time']} - {note['original'][:50]}..."):
+                        st.markdown(note['markdown'])
+            st.divider() # 分割线
             
-            # 生成 Markdown 格式的文本 (最适合打印和排版)
-            export_text = f"# 英语学习汇总 ({datetime.datetime.now().strftime('%Y-%m-%d')})\n\n"
-            for idx in selected_indices:
-                note = st.session_state.history[idx]
-                export_text += f"## 📅 记录: {note['time']}\n"
-                export_text += f"### 1. 原文\n> {note['original']}\n\n"
-                export_text += f"### 2. 降维版\n{note['rewritten']}\n\n"
-                export_text += f"### 3. 核心词汇\n"
-                for v in note['vocab']:
-                    export_text += f"- **{v['word']}**: {v['definition']}\n"
-                export_text += f"\n### 4. 语法解析\n"
-                for g in note['grammar']:
-                    export_text += f"- {g}\n"
-                export_text += "\n---\n\n"
-
-            # 下载按钮
+        # 浮动/底部导出按钮
+        if selected_records:
+            st.success(f"Selected {len(selected_records)} notes.")
+            
+            # 生成最终的 Markdown 文件内容
+            final_export = f"# DeepRead Study Notes\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
+            for note in selected_records:
+                final_export += f"## Record: {note['time']}\n"
+                final_export += f"{note['markdown']}\n"
+                final_export += "\n========================================\n\n"
+            
             st.download_button(
-                label="📥 下载 Markdown 讲义 (可直接打印)",
-                data=export_text,
-                file_name="english_study_notes.md",
-                mime="text/markdown"
+                label="📥 Download Markdown (Print-Ready)",
+                data=final_export,
+                file_name=f"DeepRead_Notes_{datetime.datetime.now().strftime('%Y%m%d')}.md",
+                mime="text/markdown",
+                type="primary"
             )
-        else:
-            st.caption("请先勾选上面的记录以进行导出。")
