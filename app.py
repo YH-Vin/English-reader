@@ -1,130 +1,188 @@
 import streamlit as st
 from openai import OpenAI
+import json
+import datetime
 
 # -----------------------------------------------------------------------------
-# 1. 页面配置 (必须放在第一行)
+# 1. 页面与状态配置
 # -----------------------------------------------------------------------------
-st.set_page_config(
-    page_title="英语降维阅读器 (通义版)",
-    page_icon="📚",
-    layout="wide"
-)
+st.set_page_config(page_title="DeepRead - 深度英语降维", page_icon="🧠", layout="wide")
+
+# 初始化 Session State (用于像"内存"一样暂时记住数据)
+if "history" not in st.session_state:
+    st.session_state.history = []  # 存放所有的阅读记录
+
+if "user_level" not in st.session_state:
+    st.session_state.user_level = "Intermediate" # 默认等级
 
 # -----------------------------------------------------------------------------
-# 2. 核心逻辑功能函数
+# 2. 核心功能函数
 # -----------------------------------------------------------------------------
 def get_api_key():
-    """
-    尝试获取 API Key。
-    优先级 1: Streamlit Secrets (最推荐，安全)
-    优先级 2: 侧边栏手动输入 (临时用)
-    """
-    # 尝试从 Secrets 获取
+    # 优先从 Secrets 获取，否则侧边栏输入
     if "ALIYUN_API_KEY" in st.secrets:
         return st.secrets["ALIYUN_API_KEY"]
+    return None
+
+def analyze_text(client, text, level, model):
+    """
+    调用 AI 进行全方位分析：降维 + 语法 + 词汇 + 文化
+    要求 AI 返回 JSON 格式以便程序处理
+    """
+    prompt = f"""
+    You are an expert English teacher. Analyze the user's text based on their level: {level}.
     
-    # 如果 Secrets 里没有，就在侧边栏显示输入框
-    with st.sidebar:
-        st.header("⚙️ 设置")
-        user_key = st.text_input("未检测到配置，请输入阿里云 API Key", type="password")
-        st.info("提示：建议在 Streamlit Secrets 中配置 Key 以免去重复输入。")
-        return user_key
-
-# -----------------------------------------------------------------------------
-# 3. 界面布局与交互
-# -----------------------------------------------------------------------------
-st.title("📚 英语降维阅读器 (Qwen驱动)")
-st.markdown("把复杂的英语长难句，一键转换为更简单、易读的版本。")
-
-# 获取 Key
-api_key = get_api_key()
-
-# 定义难度等级对应的 Prompt
-difficulty_map = {
-    "小学 (Entry Level)": "Use very simple vocabulary (top 1000 words) and short sentences. Explain strictly for a beginner (CEFR A1-A2).",
-    "高中 (Intermediate)": "Use standard vocabulary. Make sentences clear and readable. Avoid overly obscure words (CEFR B1-B2).",
-    "大学 (Advanced)": "Retain academic tone but improve clarity, flow, and structure. Keep the original depth (CEFR C1)."
-}
-
-# 左右分栏布局
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("📝 原文输入")
-    # 文本输入框
-    source_text = st.text_area("请粘贴需要降维的英语文本：", height=350, placeholder="Paste your English text here...")
+    Output format: STRICT JSON with the following keys:
+    1. "rewritten": The simplified version of the text (keep meaning, lower complexity).
+    2. "vocabulary": A list of objects, each containing "word" (from original text), "definition" (English simple definition), and "context" (why it is used here). Max 5 hardest words.
+    3. "grammar": A list of strings explaining complex sentence structures found in the original text.
+    4. "culture": A string explaining any idioms, cultural references, or tone (if none, return "No special cultural context").
     
-    # 选项区
-    c1, c2 = st.columns(2)
-    with c1:
-        selected_difficulty = st.selectbox("🎯 目标难度", list(difficulty_map.keys()))
-    with c2:
-        # 阿里云模型选择
-        model_name = st.selectbox("🤖 选择模型", ["qwen-plus", "qwen-turbo", "qwen-max"], index=0)
-
-    # 提交按钮
-    submit = st.button("🚀 开始转换", type="primary", use_container_width=True)
-
-with col2:
-    st.subheader("📖 降维结果")
-    # 创建一个空的容器，用来动态展示结果
-    result_box = st.empty()
-    result_box.info("👈 在左侧输入文本并点击转换，结果将显示在这里。")
+    Original Text:
+    {text}
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": "You are a JSON-speaking English tutor."},
+                      {"role": "user", "content": prompt}],
+            temperature=0.3, # 低温度保证 JSON 格式稳定
+            response_format={"type": "json_object"} # 强制 JSON 模式 (如果模型支持)
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        return {"error": str(e)}
 
 # -----------------------------------------------------------------------------
-# 4. 触发转换逻辑
+# 3. 侧边栏：用户画像 (记忆功能)
 # -----------------------------------------------------------------------------
-if submit:
+with st.sidebar:
+    st.header("👤 学习者档案")
+    
+    # 获取 API Key (如果没有配置 Secrets，显示输入框)
+    api_key = get_api_key()
     if not api_key:
-        st.toast("❌ 缺少 API Key！", icon="🚫")
-        st.error("请先配置 API Key 才能使用。")
-    elif not source_text:
-        st.toast("⚠️ 没看到文本呀", icon="😯")
-        st.warning("请先在左侧粘贴英语文本。")
-    else:
-        # 开始调用 API
-        result_box.empty() # 清空提示信息
-        
-        with st.spinner(f"正在请求通义千问 ({model_name})..."):
-            try:
-                # 初始化客户端 (连接阿里云)
-                client = OpenAI(
-                    api_key=api_key,
-                    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
-                )
+        api_key = st.text_input("🔑 输入阿里云 API Key", type="password")
+        if not api_key:
+            st.warning("请输入 Key 以开始使用")
 
-                # 构建指令
-                system_prompt = (
-                    "You are a professional English simplifier. "
-                    "Your GOAL is to rewrite the input text into simpler English based on the user's level. "
-                    "RULES: \n"
-                    "1. Keep the same meaning. \n"
-                    "2. Do NOT translate to Chinese. Output must be English. \n"
-                    f"3. Target Level: {difficulty_map[selected_difficulty]}"
-                )
+    st.divider()
+    
+    # 设定用户水平 (记忆功能的一部分)
+    st.subheader("你的当前水平")
+    levels = ["Beginner (小学/初中)", "Intermediate (高中/四级)", "Advanced (六级/考研)", "Native (雅思/托福)"]
+    selected_level = st.selectbox("选择水平", levels, index=1)
+    st.session_state.user_level = selected_level
+    
+    st.info(f"🧠 AI 将根据 **{selected_level.split()[0]}** 水平为你定制内容。")
 
-                # 发起请求
-                stream = client.chat.completions.create(
-                    model=model_name,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": source_text}
-                    ],
-                    temperature=0.7,
-                    stream=True  # 开启流式输出，像打字机一样显示
-                )
+# -----------------------------------------------------------------------------
+# 4. 主界面：双 Tab 布局
+# -----------------------------------------------------------------------------
+st.title("🧠 DeepRead 英语降维学习器")
 
-                #以此接收流式数据
-                report = []
-                for chunk in stream:
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        report.append(content)
-                        # 实时更新右侧显示框
-                        result_box.markdown("".join(report))
+tab1, tab2 = st.tabs(["📖 深度阅读 & 分析", "🖨️ 资料库 & 导出"])
+
+# === Tab 1: 阅读与分析功能 ===
+with tab1:
+    col_input, col_output = st.columns([1, 1.2])
+    
+    with col_input:
+        st.subheader("原文输入")
+        source_text = st.text_area("粘贴英语长难句...", height=300)
+        analyze_btn = st.button("🚀 降维 & 深度分析", type="primary", use_container_width=True)
+    
+    with col_output:
+        st.subheader("学习面板")
+        result_container = st.container()
+
+    if analyze_btn and api_key and source_text:
+        with result_container:
+            with st.spinner("AI 正在拆解语法、查词、重写中..."):
+                client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
                 
-                st.toast("✅ 转换完成！", icon="🎉")
+                # 调用核心分析函数
+                data = analyze_text(client, source_text, st.session_state.user_level, "qwen-plus")
+                
+                if "error" in data:
+                    st.error(f"分析失败: {data['error']}")
+                else:
+                    # 1. 展示降维文本
+                    st.success("✅ 降维改写")
+                    st.markdown(f"**{data['rewritten']}**")
+                    
+                    # 2. 展示分析 (使用折叠面板保持整洁)
+                    with st.expander("🔍 重点词汇 (Vocabulary)", expanded=True):
+                        for v in data.get('vocabulary', []):
+                            st.markdown(f"- **{v['word']}**: {v['definition']}")
+                    
+                    with st.expander("📐 语法拆解 (Grammar)"):
+                        for g in data.get('grammar', []):
+                            st.markdown(f"- {g}")
+                            
+                    with st.expander("🌍 文化与背景 (Context)"):
+                        st.write(data.get('culture', '无特殊背景'))
 
-            except Exception as e:
-                st.error(f"出错了: {e}")
-                st.markdown("### 可能的原因：\n1. API Key 填错了（检查引号、空格）。\n2. 阿里云账户欠费了。\n3. 网络问题。")
+                    # 3. 存入历史记录 (记忆功能)
+                    record = {
+                        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "original": source_text,
+                        "rewritten": data['rewritten'],
+                        "vocab": data.get('vocabulary', []),
+                        "grammar": data.get('grammar', [])
+                    }
+                    st.session_state.history.insert(0, record) # 插到最前面
+
+# === Tab 2: 汇总与导出功能 ===
+with tab2:
+    st.header("🗂️ 你的学习资料库")
+    
+    if not st.session_state.history:
+        st.info("还没有记录，快去 Tab 1 进行阅读吧！")
+    else:
+        # 多选框：选择要打印的内容
+        st.write("勾选你想要汇总打印的笔记：")
+        
+        # 创建一个列表来保存被选中的索引
+        selected_indices = []
+        
+        for i, item in enumerate(st.session_state.history):
+            with st.container(border=True):
+                # checkbox 的 key 必须唯一
+                is_selected = st.checkbox(f"{item['time']} - {item['original'][:30]}...", key=f"hist_{i}")
+                if is_selected:
+                    selected_indices.append(i)
+                
+                st.caption(f"降维: {item['rewritten'][:50]}...")
+
+        st.divider()
+        
+        # 导出逻辑
+        if selected_indices:
+            st.subheader("📤 导出选项")
+            
+            # 生成 Markdown 格式的文本 (最适合打印和排版)
+            export_text = f"# 英语学习汇总 ({datetime.datetime.now().strftime('%Y-%m-%d')})\n\n"
+            for idx in selected_indices:
+                note = st.session_state.history[idx]
+                export_text += f"## 📅 记录: {note['time']}\n"
+                export_text += f"### 1. 原文\n> {note['original']}\n\n"
+                export_text += f"### 2. 降维版\n{note['rewritten']}\n\n"
+                export_text += f"### 3. 核心词汇\n"
+                for v in note['vocab']:
+                    export_text += f"- **{v['word']}**: {v['definition']}\n"
+                export_text += f"\n### 4. 语法解析\n"
+                for g in note['grammar']:
+                    export_text += f"- {g}\n"
+                export_text += "\n---\n\n"
+
+            # 下载按钮
+            st.download_button(
+                label="📥 下载 Markdown 讲义 (可直接打印)",
+                data=export_text,
+                file_name="english_study_notes.md",
+                mime="text/markdown"
+            )
+        else:
+            st.caption("请先勾选上面的记录以进行导出。")
