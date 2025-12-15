@@ -30,21 +30,6 @@ custom_css = """
         color: #111 !important;
     }
 
-    /* 输入框美化：去除默认黑色边框，改为柔和阴影 */
-    .stTextArea textarea {
-        background-color: #f7f9fb !important;
-        border: 1px solid #e1e4e8 !important;
-        border-radius: 12px !important;
-        padding: 15px !important;
-        box-shadow: none !important;
-        transition: all 0.2s ease;
-    }
-    .stTextArea textarea:focus {
-        border-color: #4dabf7 !important;
-        box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.1) !important;
-        background-color: #ffffff !important;
-    }
-
     /* 按钮美化：扁平化设计 */
     div.stButton > button {
         border-radius: 10px !important;
