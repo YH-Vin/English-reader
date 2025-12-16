@@ -70,26 +70,66 @@ def load_save_token(token):
     except: return None
 
 def analyze_text_pro(client, text, level, model):
-    prompt = f"""
-    You are an elite English Linguistics Professor. Analyze the provided text for a student at level: {level}.
-    GOAL: Produce a structured learning guide like a high-quality textbook.
-    OUTPUT FORMAT: Return STRICT JSON with these keys:
-    1. "main_idea": Concise summary (2-3 sentences).
-    2. "explanation": List of objects (keys: "title", "original", "meaning"). Focus on deep comprehension.
-    3. "grammar": List of objects (keys: "title", "original", "breakdown"). Explain syntax/structure.
-    4. "vocabulary": List of objects (keys: "word", "ipa", "definition", "context"). Max 6 hard words. Include IPA pronunciation.
-    Original Text: {text}
     """
+    极致优化版分析函数：
+    1. 逐句全量解析 (Sentence-by-Sentence Breakdown)
+    2. 严格的词汇分级过滤 (Strict Vocabulary Filtering)
+    3. 降维释义 (Simplified Definitions)
+    """
+    
+    # 提取等级的核心关键词（例如 "Intermediate"），用于 Prompt 中的强调
+    level_keyword = level.split()[0] if level else "Intermediate"
+
+    prompt = f"""
+    You are a strict and elite Linguistics Professor and Curriculum Designer. 
+    Analyze the provided English text for a student at the CEFR level: {level}.
+
+    Your task is to generate a structured learning guide. You must strictly adhere to the following rules:
+
+    ### RULE 1: EXPLANATION (MANDATORY Sentence-by-Sentence Analysis)
+    - You MUST iterate through the text **sentence by sentence**.
+    - For **EVERY** sentence in the text, provide a breakdown object.
+    - **DO NOT SKIP** any sentence unless it is essentially meaningless (e.g., just "Yes." or "No.").
+    - If a sentence is simple, briefly explain its function or connection to the context.
+    - If a sentence is complex, deconstruct its logic deeply.
+    - **"title"** should be a short concept summary (e.g., "The Opening Argument", "Supporting Detail", "The Conclusion").
+    - **"original"** must be the exact sentence from the text.
+
+    ### RULE 2: VOCABULARY (Strict Level Filtering)
+    - **SELECTION CRITERIA**: Select words that are **significantly difficult** for a learner at {level}.
+    - **NEGATIVE CONSTRAINT**: DO NOT select words that a student at {level} should already know. If the word is common (e.g., "apple", "book", "difficult" for Intermediate), **IGNORE IT**.
+    - If there are no words above the user's level, return an empty list for vocabulary. Do not fill it with easy words just to fill space.
+    - **Max quantity**: 6 words (but only if they are truly hard).
+
+    ### RULE 3: DEFINITIONS (Comprehensible Input)
+    - The **"definition"** and **"context"** for vocabulary must be written using English that is **simpler** than the user's current level ({level}).
+    - Do not use complex words to explain other complex words.
+
+    ### OUTPUT FORMAT
+    Return a **STRICT JSON** object with the following keys:
+    1. "main_idea": Concise summary (2-3 sentences).
+    2. "explanation": A list of objects. Each object must represent ONE sentence from the text. Keys: "title", "original", "meaning".
+    3. "grammar": List of objects (keys: "title", "original", "breakdown"). Focus on syntax relevant to {level}.
+    4. "vocabulary": List of objects (keys: "word", "ipa", "definition", "context").
+
+    Original Text:
+    {text}
+    """
+    
     try:
         response = client.chat.completions.create(
             model=model,
-            messages=[{"role": "system", "content": "You are a JSON-speaking Linguistics Professor."}, {"role": "user", "content": prompt}],
-            temperature=0.2, response_format={"type": "json_object"}
+            messages=[
+                # System Prompt 强化人设，确保 AI 处于严格模式
+                {"role": "system", "content": f"You are a strict English tutor. You never hallucinate. You prioritize the user's CEFR level ({level_keyword}) above all else."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1, # 极低温度，防止 AI 发散或遗漏，保证逻辑严密
+            response_format={"type": "json_object"}
         )
         return json.loads(response.choices[0].message.content)
-    except json.JSONDecodeError: return {"error": "AI 返回格式异常，请重试。"}
-    except Exception as e: return {"error": str(e)}
-
+    except Exception as e:
+        return {"error": str(e)}
 # -----------------------------------------------------------------------------
 # 4. 侧边栏
 # -----------------------------------------------------------------------------
