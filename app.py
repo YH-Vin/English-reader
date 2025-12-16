@@ -175,6 +175,17 @@ tab_analysis, tab_library = st.tabs(["✨ Deep Analysis", "📚 My Library"])
 
 # === Tab 1: 深度分析 ===
 with tab_analysis:
+    # --- 📱 手机端提示 (插入在这里) ---
+    st.markdown(
+        """
+        <div style='background-color: #fff0f0; padding: 10px; border-radius: 8px; border-left: 5px solid #ff4b4b; margin-bottom: 20px;'>
+            <strong style='color: #d8000c;'>⚠️ 手机用户请注意：</strong>
+            <span style='color: #333;'>请点击页面左上角的 <b>></b> 箭头展开侧边栏输入 Key，或者在浏览器菜单中选择<b>“请求桌面网站”</b>以获得最佳体验。</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    # -------------------------------
     col_in, col_out = st.columns([1, 1.1])
     
     with col_in:
@@ -294,3 +305,10 @@ with tab_library:
                 mime="text/markdown",
                 type="primary"
             )
+    # 简单的清空逻辑
+def clear_text():
+    st.session_state.source_text = ""
+
+# 在 text_area 绑定 key
+source_text = st.text_area(..., key="source_text")
+st.button("🗑️ 清空文本", on_click=clear_text)
