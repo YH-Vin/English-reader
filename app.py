@@ -246,7 +246,7 @@ with tab_analysis:
         
         c1, c2, c3 = st.columns([1.5, 1, 1])
         with c1:
-            model = st.selectbox("Model", ["qwen-flash", "qwen3-max"], label_visibility="collapsed")
+            model = st.selectbox("Model", ["qwen3-max", "qwen-flash"], label_visibility="collapsed")
         with c2:
             # --- 关键修复：绑定 on_click 回调 ---
             st.button("🗑️ Clear", use_container_width=True, on_click=clear_text)
