@@ -130,6 +130,65 @@ def analyze_text_pro(client, text, level, model):
         return json.loads(response.choices[0].message.content)
     except Exception as e:
         return {"error": str(e)}
+
+def analyze_text_stream(client, text, level, model):
+    """
+    流式分析函数：直接要求 AI 输出 Markdown 格式，不再经过 JSON 解析
+    """
+    # 提取等级关键词
+    level_keyword = level.split()[0] if level else "Intermediate"
+
+    prompt = f"""
+    You are a strict and elite Linguistics Professor. Analyze the text for a student at CEFR level: {level}.
+    
+    ### STRICT OUTPUT RULES
+    1. Output **DIRECTLY in Markdown format**. Do not use JSON.
+    2. **Sentence-by-Sentence Analysis**: You MUST iterate through the text sentence by sentence. Do not skip any sentence.
+    3. **Vocabulary**: Select words significantly difficult for {level}. Definitions must be simpler than the word itself.
+    
+    ### REQUIRED MARKDOWN STRUCTURE
+    Please output exactly in this format:
+
+    ### **Main Idea**
+    [Concise summary in 2-3 sentences]
+
+    ---
+    ### **Detailed Explanation**
+    **1. [Short Concept Title]**
+    > *Original: "[The exact sentence]"*
+    *   **Meaning:** [Deep analysis of the sentence logic]
+
+    **2. [Next Concept Title]**
+    ... (Repeat for EVERY sentence) ...
+
+    ---
+    ### **Grammar Breakdown**
+    **1. [Grammar Point Title]**
+    > *"[Snippet]"*
+    *   **Analysis:** [Syntax breakdown]
+
+    ---
+    ### **Vocabulary**
+    **1. [Word]** `[IPA]`
+    *   **Def:** [Simple definition]
+    *   **Ctx:** [Context usage]
+
+    Original Text:
+    {text}
+    """
+    
+    # 开启 stream=True
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a specialized Linguistics Tutor. Output strictly structured Markdown."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.1,
+        stream=True  # 关键点：开启流式
+    )
+    return stream
+
 # -----------------------------------------------------------------------------
 # 4. 侧边栏
 # -----------------------------------------------------------------------------
