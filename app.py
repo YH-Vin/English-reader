@@ -198,31 +198,52 @@ with tab_analysis:
         st.markdown("#### Insight")
         result_box = st.container()
 
+    # -------------------------------------------------------------------------
+    # 替换后的流式输出逻辑
+    # -------------------------------------------------------------------------
     if analyze_btn:
-        if not api_key: st.toast("🚫 Please enter API Key first.", icon="🔒")
-        elif not source_text: st.toast("✍️ Please paste some text.", icon="📝")
+        if not api_key:
+            st.toast("🚫 Please enter API Key first.", icon="🔒")
+        elif not source_text:
+            st.toast("✍️ Please paste some text.", icon="📝")
         else:
             with result_box:
-                with st.spinner("Analyzing..."):
-                    try:
-                        client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
-                        data = analyze_text_pro(client, source_text, st.session_state.user_level, model)
-                        if "error" in data: st.error(f"Analysis Failed: {data['error']}")
-                        else:
-                            md_content = f"### **Main Idea**\n{data.get('main_idea', 'No summary available.')}\n\n---\n### **Detailed Explanation**\n\n"
-                            for i, item in enumerate(data.get('explanation', []), 1):
-                                md_content += f"**{i}. {item['title']}**\n> *Original: \"{item['original']}\"*\n* **Meaning:** {item['meaning']}\n\n"
-                            md_content += "---\n### **Grammar Breakdown**\n\n"
-                            for i, item in enumerate(data.get('grammar', []), 1):
-                                md_content += f"**{i}. {item['title']}**\n> *\"{item['original']}\"*\n* **Analysis:** {item['breakdown']}\n\n"
-                            md_content += "---\n### **Vocabulary**\n\n"
-                            for i, item in enumerate(data.get('vocabulary', []), 1):
-                                md_content += f"**{i}. {item['word']}** `{item.get('ipa', '')}`\n* **Def:** {item['definition']}\n* **Ctx:** {item['context']}\n\n"
-                            st.markdown(md_content)
-                            record = {"time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), "original": source_text, "markdown": md_content}
-                            st.session_state.history.insert(0, record)
-                            st.toast("✅ Saved to Library!", icon="💾")
-                    except Exception as e: st.error(f"Connection Error: {e}")
+                # 1. 准备一个空的容器用来显示流式内容
+                placeholder = st.empty()
+                full_response = ""
+                
+                # 2. 开始调用流式函数
+                try:
+                    client = OpenAI(
+                        api_key=api_key, 
+                        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+                    )
+                    
+                    # 调用刚才新写的 stream 函数
+                    stream = analyze_text_stream(client, source_text, st.session_state.user_level, model)
+                    
+                    # 3. 实时循环接收数据并显示
+                    for chunk in stream:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            full_response += content
+                            # 实时刷新 UI，加一个光标 ▌ 让它看起来像在打字
+                            placeholder.markdown(full_response + "▌")
+                    
+                    # 4. 生成完毕，移除光标，显示最终结果
+                    placeholder.markdown(full_response)
+                    
+                    # 5. 存入历史记录 (注意：这里直接存 Markdown 字符串)
+                    record = {
+                        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "original": source_text,
+                        "markdown": full_response  # 直接存生成好的 Markdown
+                    }
+                    st.session_state.history.insert(0, record)
+                    st.toast("✅ Analysis complete & Saved!", icon="💾")
+
+                except Exception as e:
+                    st.error(f"Connection Error: {e}")
 
 # === Tab 2: 历史资料库 ===
 with tab_library:
