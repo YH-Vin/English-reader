@@ -222,8 +222,6 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 # 5. 主界面
 # -----------------------------------------------------------------------------
-st.title("📘 DeepRead Pro")
-st.caption("Your AI-Powered Linguistics Tutor")
 
 # 获取当前日期
 today_str = datetime.datetime.now().strftime("%Y-%m-%d %A")
