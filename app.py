@@ -9,8 +9,19 @@ import zlib
 # 1. 页面与视觉配置
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="DeepRead Pro",
-    page_icon="📘",
+    # --- 顶部：标题 + 实时日期 ---
+# 获取当前日期和星期
+today_str = datetime.datetime.now().strftime("%Y-%m-%d %A")
+
+# 使用列布局：左边是标题，右边是日期
+col_title, col_date = st.columns([3, 1])
+
+with col_title:
+    st.title("📘 DeepRead Pro")
+
+with col_date:
+    # 右对齐显示日期，颜色设为灰色，稍微向下偏移一点以对齐标题
+    st.markdown(f"<div style='text-align: right; color: gray; padding-top: 25px; font-size: 0.9em;'>📅 {today_str}</div>", unsafe_allow_html=True)
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -329,3 +340,28 @@ with tab_library:
             final_export = f"# DeepRead Study Notes\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d')}\n\n"
             for note in selected_records: final_export += f"## Record: {note['time']}\n{note['markdown']}\n\n========================================\n\n"
             st.download_button("📥 Download Markdown", final_export, f"DeepRead_Notes_{datetime.datetime.now().strftime('%Y%m%d')}.md", "text/markdown", type="primary")
+
+# --- 底部：固定版权署名 (CSS) ---
+st.markdown(
+    """
+    <style>
+        .footer {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background-color: transparent; /* 透明背景 */
+            color: #888; /* 灰色文字 */
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            z-index: 999;
+            pointer-events: none; /* 让鼠标可以穿透文字点击下面的按钮 */
+        }
+    </style>
+    <div class="footer">
+        Designed by <b>uncompleted vin</b> | Powered by Aliyun Qwen
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
