@@ -15,21 +15,68 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )  # <--- 这里必须闭合！设置结束。
 
-# CSS: 兼容深色模式，修复输入框背景问题
+# CSS: 极简风格 + 修复侧边栏无法打开的问题
 custom_css = """
 <style>
+    /* 全局字体优化 */
     .stApp { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    
+    /* --- 关键修复开始 --- */
+    /* 不要隐藏 header，否则手机上找不到侧边栏开关！ */
+    /* header {visibility: hidden;}  <-- 这一行被删除了 */
+    
+    /* 只隐藏右上角的“三个点”菜单和底部的官方水印 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    
+    /* 让顶部导航栏背景变透明，减少视觉干扰 */
+    header[data-testid="stHeader"] {
+        background-color: transparent;
+    }
+    /* --- 关键修复结束 --- */
+    
+    /* 标题样式 */
     h1 { font-weight: 700 !important; letter-spacing: -0.03em !important; }
-    div.stButton > button { border-radius: 10px !important; font-weight: 600 !important; border: none !important; padding: 0.5rem 1rem !important; transition: transform 0.1s; }
+    
+    /* 按钮美化 */
+    div.stButton > button { 
+        border-radius: 8px !important; 
+        font-weight: 600 !important; 
+        border: none !important; 
+        padding: 0.5rem 1rem !important;
+        transition: all 0.2s;
+    }
     div.stButton > button:active { transform: scale(0.98); }
+    
+    /* 分割线 */
     hr { margin: 2em 0 !important; border: none !important; border-top: 1px solid #eaeaea !important; }
-    .mobile-alert { background-color: #fff0f0; padding: 12px; border-radius: 8px; border-left: 5px solid #ff4b4b; margin-bottom: 25px; color: #333; }
+    
+    /* 手机端提示框 */
+    .mobile-alert { 
+        background-color: #fff0f0; 
+        padding: 12px; 
+        border-radius: 8px; 
+        border-left: 5px solid #ff4b4b; 
+        margin-bottom: 25px; 
+        color: #333; 
+    }
+
+    /* 底部版权署名栏 */
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: transparent;
+        color: #888;
+        text-align: center;
+        padding: 10px;
+        font-size: 12px;
+        pointer-events: none;
+        z-index: 999;
+    }
 </style>
 """
-st.markdown(custom_css, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # 2. 状态管理与回调函数
