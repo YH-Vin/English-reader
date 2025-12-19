@@ -9,22 +9,11 @@ import zlib
 # 1. 页面与视觉配置
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    # --- 顶部：标题 + 实时日期 ---
-# 获取当前日期和星期
-today_str = datetime.datetime.now().strftime("%Y-%m-%d %A")
-
-# 使用列布局：左边是标题，右边是日期
-col_title, col_date = st.columns([3, 1])
-
-with col_title:
-    st.title("📘 DeepRead Pro")
-
-with col_date:
-    # 右对齐显示日期，颜色设为灰色，稍微向下偏移一点以对齐标题
-    st.markdown(f"<div style='text-align: right; color: gray; padding-top: 25px; font-size: 0.9em;'>📅 {today_str}</div>", unsafe_allow_html=True)
+    page_title="DeepRead Pro",
+    page_icon="📘",
     layout="wide",
     initial_sidebar_state="expanded"
-)
+)  # <--- 这里必须闭合！设置结束。
 
 # CSS: 兼容深色模式，修复输入框背景问题
 custom_css = """
@@ -235,6 +224,22 @@ with st.sidebar:
 # -----------------------------------------------------------------------------
 st.title("📘 DeepRead Pro")
 st.caption("Your AI-Powered Linguistics Tutor")
+
+# 获取当前日期
+today_str = datetime.datetime.now().strftime("%Y-%m-%d %A")
+
+# 左右布局：左标题，右日期
+col_title, col_date = st.columns([3, 1])
+
+with col_title:
+    st.title("📘 DeepRead Pro")
+
+with col_date:
+    # 右对齐显示日期
+    st.markdown(f"<div style='text-align: right; color: gray; padding-top: 25px; font-size: 0.9em;'>📅 {today_str}</div>", unsafe_allow_html=True)
+
+st.caption("Your AI-Powered Linguistics Tutor")
+
 
 tab_analysis, tab_library = st.tabs(["✨ Deep Analysis", "📚 My Library"])
 
